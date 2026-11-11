@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Invoice Agent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>AI Invoice Agent</h1>
+      <p class="sub">Turn a deal into PayPal invoices. Nothing reaches your client until you approve it.</p>
+    </div>
+    <div class="pills">
+      <span class="pill">PayPal sandbox</span>
+      <span class="pill">USD</span>
+      <span class="pill" id="ai-pill">AI: …</span>
+    </div>
+  </header>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <main>
+    <!-- (a) New deal -->
+    <section class="card">
+      <h2>New deal</h2>
+      <label for="deal-text" class="label">Describe the deal in plain words</label>
+      <textarea id="deal-text" rows="5" placeholder="e.g. Website redesign for Acme Co (billing@acme.example), $2,400 total. 50% upfront, 50% in 30 days."></textarea>
+      <div class="row">
+        <button id="parse-btn" class="btn primary">Parse</button>
+        <span id="parse-status" class="muted"></span>
+      </div>
+      <div id="parse-error" class="error" hidden></div>
+
+      <div id="plan" class="plan" hidden>
+        <div id="plan-sample" class="mock-banner" hidden>Sample data (AI_MODE=mock). This plan was not produced by an AI model.</div>
+        <div class="ai-label" id="plan-ai"></div>
+        <div class="plan-grid">
+          <div><span class="k">Client</span><span class="v" id="plan-name"></span></div>
+          <div><span class="k">Email</span><span class="v" id="plan-email"></span></div>
+          <div><span class="k">Total</span><span class="v" id="plan-total"></span></div>
+        </div>
+        <table class="mini">
+          <thead><tr><th>#</th><th>Instalment</th><th>Share</th><th>Amount</th><th>Due</th></tr></thead>
+          <tbody id="plan-instalments"></tbody>
+        </table>
+        <div id="plan-missing" class="missing" hidden></div>
+        <p class="muted small" id="plan-recipient-note"></p>
+        <div class="row">
+          <button id="approve-plan-btn" class="btn primary">Approve</button>
+          <button id="cancel-plan-btn" class="btn">Cancel</button>
+          <span class="muted small">Approve creates and sends instalment 1.</span>
+        </div>
+        <div id="approve-error" class="error" hidden></div>
+      </div>
+    </section>
+
+    <!-- (b) Deals -->
+    <section class="card">
+      <div class="row between">
+        <h2>Deals</h2>
+        <button id="refresh-btn" class="btn small">Refresh</button>
+      </div>
+      <div id="deals-error" class="error" hidden></div>
+      <div id="deals-loading" class="muted" hidden>Loading live status from PayPal…</div>
+      <div id="deals-empty" class="empty" hidden>No deals yet. Parse and approve one above.</div>
+      <div class="table-wrap">
+        <table id="deals-table" class="deals" hidden>
+          <thead><tr><th>Client</th><th>Amount</th><th>Instalment</th><th>Status</th><th></th></tr></thead>
+          <tbody id="deals-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- (c) Reminder decision card -->
+  <div id="reminder-modal" class="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="reminder-title">
+      <div class="row between">
+        <h2 id="reminder-title">Reminder advice</h2>
+        <button class="btn icon" data-close aria-label="Close">×</button>
+      </div>
+      <p class="muted small" id="reminder-for"></p>
+      <div class="row">
+        <label for="days-overdue" class="label inline">Days overdue</label>
+        <input id="days-overdue" type="number" min="0" max="365" value="7">
+        <button id="advice-btn" class="btn">Get advice</button>
+      </div>
+      <p class="muted small">Sandbox invoices never become overdue on their own, so enter a number to simulate it.</p>
+      <div id="advice-error" class="error" hidden></div>
+      <div id="advice-loading" class="muted" hidden>Asking the AI…</div>
+
+      <div id="decision" hidden>
+        <div id="decision-sample" class="mock-banner" hidden>Sample data (AI_MODE=mock). This advice was not produced by an AI model.</div>
+        <div class="ai-label" id="decision-ai"></div>
+        <div class="row"><span class="k">Tone</span><span id="decision-tone" class="tone"></span></div>
+        <div class="k">Why</div>
+        <p id="decision-reasoning" class="reasoning"></p>
+        <label for="decision-message" class="k">Message to client (editable)</label>
+        <textarea id="decision-message" rows="5" maxlength="4000"></textarea>
+        <p class="muted small"><span class="k">Next action:</span> <span id="decision-next"></span></p>
+        <p class="muted small">PayPal may replace a custom reminder note with its own default text.</p>
+        <div class="row">
+          <button id="approve-reminder-btn" class="btn">Approve</button>
+          <button id="send-reminder-btn" class="btn primary" disabled>Send</button>
+          <span id="reminder-approval" class="muted small">Approve the message to enable Send.</span>
+        </div>
+        <div id="send-error" class="error" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approval dialog for sending the next instalment -->
+  <div id="confirm-modal" class="modal" hidden>
+    <div class="modal-box small-box" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h2 id="confirm-title">Send next instalment?</h2>
+      <p id="confirm-body"></p>
+      <div class="row">
+        <button id="confirm-approve-btn" class="btn primary">Approve and send</button>
+        <button class="btn" data-close>Cancel</button>
+      </div>
+      <div id="confirm-error" class="error" hidden></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
