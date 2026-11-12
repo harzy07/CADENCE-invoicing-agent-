@@ -301,8 +301,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-// Localhost only by default. Set HOST=0.0.0.0 on a host such as Render so it can reach the server.
-const HOST = (process.env.HOST || "127.0.0.1").trim();
+// Localhost only by default. Render sets RENDER=true on its services, so listen on
+// all interfaces there even if HOST is not set. HOST, when set, always wins.
+const HOST = (process.env.HOST || (process.env.RENDER ? "0.0.0.0" : "127.0.0.1")).trim();
 app.listen(PORT, HOST, () => {
   const cfg = describeConfig();
   console.log(`Invoice agent running on ${HOST}:${PORT}${HOST === "127.0.0.1" ? ` (http://localhost:${PORT})` : ""} (PayPal sandbox, USD only)`);
