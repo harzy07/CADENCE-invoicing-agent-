@@ -56,6 +56,9 @@ function validatePlan(plan) {
   if (inst.some((i) => typeof i?.label !== "string" || !(i.percent > 0) || !Number.isInteger(i.due_in_days) || i.due_in_days < 0 || i.due_in_days > 365)) {
     problems.push("each instalment needs a label, a percent above 0 and due_in_days between 0 and 365");
   }
+  if (inst.some((i) => typeof i?.label === "string" && (!i.label.trim() || i.label.length > 120))) problems.push("each instalment label must be 1-120 characters");
+  // Optional note shown on the PayPal invoice (PayPal's limit for detail.note is 4000).
+  if (inst.some((i) => i?.note !== undefined && i.note !== null && (typeof i.note !== "string" || i.note.length > 4000))) problems.push("an instalment note must be text of 4000 characters or fewer");
   if (Math.abs(inst.reduce((s, i) => s + Number(i?.percent || 0), 0) - 100) > 0.01) problems.push("instalment percents must add up to 100");
   if (Array.isArray(plan.missing_fields) && plan.missing_fields.length) problems.push(`plan still has missing fields: ${plan.missing_fields.join(", ")}`);
   if (problems.length) throw new AppError(400, "INVALID_PLAN", "The plan cannot be approved yet.", problems);
@@ -85,7 +88,7 @@ async function sendInstalment(deal, i) {
       itemName: `${inst.label} (${i + 1} of ${deal.instalments.length})`,
       amount: inst.amount,
       dueDate: due,
-      note: `Instalment ${i + 1} of ${deal.instalments.length} for ${deal.plan.client_name}.`,
+      note: inst.note || `Instalment ${i + 1} of ${deal.instalments.length} for ${deal.plan.client_name}.`,
     });
     store.saveDeal(deal); // keep the draft ID even if sending fails
   }
@@ -115,7 +118,8 @@ function latestSentIndex(deal) {
 
 async function liveDeal(deal) {
   const instalments = await Promise.all(deal.instalments.map(async (inst, i) => {
-    const base = { n: i + 1, label: inst.label, percent: inst.percent, amount: inst.amount, due_date: inst.due_date, invoice_id: inst.invoice_id, sent_at: inst.sent_at };
+    const note = inst.note || `Instalment ${i + 1} of ${deal.instalments.length} for ${deal.plan.client_name}.`;
+    const base = { n: i + 1, label: inst.label, percent: inst.percent, amount: inst.amount, due_date: inst.due_date, note, invoice_id: inst.invoice_id, sent_at: inst.sent_at };
     if (!inst.invoice_id) return { ...base, status: null, badge: "Not created" };
     try {
       const inv = await paypal.getInvoice(inst.invoice_id);
@@ -174,12 +178,14 @@ app.post("/api/deals/approve", async (req, res) => {
       client_email: plan.client_email.trim(),
       total: Math.round(plan.total * 100) / 100,
       currency: "USD",
-      instalments: plan.instalments.map(({ label, percent, due_in_days }) => ({ label, percent, due_in_days })),
+      instalments: plan.instalments.map(({ label, percent, due_in_days }) => ({ label: label.trim(), percent, due_in_days })),
     },
     // Sandbox safety: if CLIENT_EMAIL is set, every invoice goes to that sandbox buyer.
     sent_to_email: process.env.CLIENT_EMAIL || plan.client_email.trim(),
     instalments: plan.instalments.map((inst, i) => ({
-      label: inst.label, percent: inst.percent, amount: amounts[i], due_date: addDays(inst.due_in_days), invoice_id: null, sent_at: null,
+      label: inst.label.trim(), percent: inst.percent, amount: amounts[i], due_date: addDays(inst.due_in_days),
+      note: typeof inst.note === "string" && inst.note.trim() ? inst.note.trim() : null,
+      invoice_id: null, sent_at: null,
     })),
     reminders: [],
   };
