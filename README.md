@@ -4,7 +4,7 @@
 
 Cadence turns a deal described in plain words, such as "Website redesign for Riverside Dental, priya@riverside.example, $1,500: 60% upfront, 40% in 30 days", into a PayPal instalment plan. You review and edit the plan, and nothing is sent until you approve it. Approved instalments become real PayPal invoices (sandbox), their live status shows in an AG Grid ledger, and when one is overdue an AI reminder strategist suggests a tone and message inside a fixed escalation policy. You edit and approve every reminder before it goes out.
 
-**Live demo:** [https://paypal-hackathon-1we7.onrender.com](https://paypal-hackathon-1we7.onrender.com) · **License:** MIT
+**Live demo:** [https://cadence-tqlb.onrender.com](https://cadence-tqlb.onrender.com) · **License:** MIT
 
 ---
 
@@ -75,7 +75,7 @@ Errors are JSON: `{"error": {"code", "message", "details"}}`.
 | **PayPal Invoicing API (sandbox)** | OAuth client-credentials token (cached until 60 seconds before expiry); create draft invoice; send invoice; get invoice for live status; send reminder (`/remind`); record a payment (`/payments`) for the demo-only "Simulate payment". |
 | **AG Grid Community** 36 (MIT) | The invoices ledger: custom cell renderers for client, amount, instalment and status pills, sorting, column filters, quick search, pagination, CSV export, and a pinned actions column. Themed with AG Grid's Theming API. Only `ag-grid-community` is used; there is no Enterprise package. |
 | **Kiro** | The AI coding assistant used to build this project: the backend, frontend, AG Grid integration, prompts and the test scripts used during development. |
-| **Render** | Hosting for the live demo at [https://paypal-hackathon-1we7.onrender.com](https://paypal-hackathon-1we7.onrender.com). |
+| **Render** | Hosting for the live demo at [https://cadence-tqlb.onrender.com](https://cadence-tqlb.onrender.com). |
 
 ## Safety design
 
@@ -98,8 +98,8 @@ You need Node.js 20.6 or later, a PayPal Developer account (free) and a Groq API
 
 1. **Clone and install**
    ```
-   git clone https://github.com/harzy07/paypal-hackathon.git
-   cd paypal-hackathon
+   git clone https://github.com/harzy07/CADENCE-invoicing-agent-.git
+   cd CADENCE-invoicing-agent-
    npm install
    ```
 2. **Create a PayPal sandbox app.** In the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), go to Apps & Credentials, switch to **Sandbox**, create an app and turn on **Invoicing** under Features. Under Testing Tools → Sandbox Accounts, note the email of a **personal** (buyer) sandbox account to use as `CLIENT_EMAIL`.
@@ -144,7 +144,7 @@ Create a **Web Service** from this repo with build command `npm install` and sta
 
 ## Testing instructions for judges
 
-**Live demo:** [https://paypal-hackathon-1we7.onrender.com](https://paypal-hackathon-1we7.onrender.com)
+**Live demo:** [https://cadence-tqlb.onrender.com](https://cadence-tqlb.onrender.com)
 
 The demo runs on Render's free plan, so the first request after a quiet period can take about 40 seconds while the service wakes up. If the page doesn't load, wait and refresh.
 
@@ -164,7 +164,7 @@ The demo runs on Render's free plan, so the first request after a quiet period c
 
 To see the approval gate reject a send, call the API without the flag:
 ```
-curl -X POST https://paypal-hackathon-1we7.onrender.com/api/deals/<deal-id>/instalments/2/send -H "Content-Type: application/json" -d "{}"
+curl -X POST https://cadence-tqlb.onrender.com/api/deals/<deal-id>/instalments/2/send -H "Content-Type: application/json" -d "{}"
 ```
 It returns HTTP 403 `APPROVAL_REQUIRED`.
 

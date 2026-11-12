@@ -88,12 +88,6 @@ function friendly(code, message) {
 // The server stores approvals and send times. Parse events, reminder times and
 // simulated payments are recorded here, in this browser, as they happen.
 const LOG_KEY = "cadence.activity.v1";
-// Carry over activity recorded before the rename (old key from the Plainbill name).
-try {
-  const old = localStorage.getItem("plainbill.activity.v1");
-  if (old && !localStorage.getItem(LOG_KEY)) localStorage.setItem(LOG_KEY, old);
-  localStorage.removeItem("plainbill.activity.v1");
-} catch { /* storage disabled */ }
 function readLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; } }
 function logEvent(e) {
   const log = readLog();

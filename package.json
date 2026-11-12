@@ -1,7 +1,7 @@
 {
-  "name": "paypal-hackathon",
+  "name": "cadence-invoicing-agent",
   "version": "1.0.0",
-  "description": "AI invoice agent for freelancers (PayPal sandbox)",
+  "description": "Cadence: AI invoice agent for freelancers (PayPal sandbox)",
   "private": true,
   "main": "src/server.js",
   "scripts": {
@@ -12,16 +12,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/harzy07/paypal-hackathon.git"
+    "url": "git+https://github.com/harzy07/CADENCE-invoicing-agent-.git"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/harzy07/paypal-hackathon/issues"
+    "url": "https://github.com/harzy07/CADENCE-invoicing-agent-/issues"
   },
-  "homepage": "https://github.com/harzy07/paypal-hackathon#readme",
+  "homepage": "https://github.com/harzy07/CADENCE-invoicing-agent-#readme",
   "dependencies": {
     "ag-grid-community": "^36.3.0",
     "express": "^5.3.0"
