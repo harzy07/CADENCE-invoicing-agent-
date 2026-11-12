@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/harzy07/paypal-hackathon#readme",
   "dependencies": {
+    "ag-grid-community": "^36.3.0",
     "express": "^5.3.0"
   }
 }

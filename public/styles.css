@@ -127,9 +127,9 @@ p { margin: 0; }
 
 /* ---------- Forms ---------- */
 .field-label, .label-sm { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: var(--s1); }
-textarea, input[type=number], input[type=text], input[type=date] { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 12px var(--s2); }
+textarea, input[type=number]:not(.ag-input-field-input), input[type=text]:not(.ag-input-field-input), input[type=date] { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 12px var(--s2); }
 textarea { resize: vertical; min-height: 96px; line-height: 1.55; }
-textarea:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .18); }
+textarea:focus, input:not(.ag-input-field-input):focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .18); }
 .form-actions { display: flex; gap: var(--s1); margin-top: var(--s3); }
 .inline-form { display: flex; align-items: flex-end; gap: var(--s2); flex-wrap: wrap; }
 .inline-form .field-label { width: 100%; margin-bottom: -8px; }
@@ -264,7 +264,8 @@ td.actions .icon-btn { width: 32px; height: 32px; }
 .tone-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .tone-friendly { background: var(--green-bg); color: var(--green-fg); }
 .tone-firm { background: var(--amber-bg); color: var(--amber-fg); }
-.tone-final_notice { background: var(--red-bg); color: var(--red-fg); }
+.tone-formal { background: var(--red-bg); color: var(--red-fg); }
+.policy-note { margin: -4px 0 4px; font-size: 13px; font-weight: 600; color: var(--amber-fg); }
 .reasoning { padding: 12px var(--s2); background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 0 var(--r) var(--r) 0; color: var(--ink); }
 
 /* ---------- Toasts ---------- */
@@ -300,4 +301,33 @@ td.actions .icon-btn { width: 32px; height: 32px; }
   .facts { grid-template-columns: minmax(0, 1fr); }
   .edit-grid { grid-template-columns: minmax(0, 1fr); }
   .hide-sm { display: none; }
+}
+
+/* ---------- Invoices grid (AG Grid Community) ---------- */
+.grid-host { width: 100%; border-radius: 0 0 var(--r-lg) var(--r-lg); overflow: hidden; }
+.grid-host .ag-header-cell-text { text-transform: uppercase; letter-spacing: .05em; }
+.grid-host .ag-cell { display: flex; align-items: center; line-height: 1.4; }
+.grid-host .ag-right-aligned-cell { justify-content: flex-end; }
+.grid-host .ag-right-aligned-cell .grid-cell { align-items: flex-end; text-align: right; }
+.grid-cell { display: flex; flex-direction: column; justify-content: center; min-width: 0; width: 100%; }
+.grid-cell .cell-main, .grid-cell > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-cell .cell-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-cell .pill { align-self: flex-start; }
+.grid-host .grid-actions { justify-content: center; padding: 0; }
+/* AG Grid v36 class names for the pinned "⋯" column. */
+.grid-host .ag-cell-first-right-pinned, .grid-host .ag-header-cell-first-right-pinned { border-left-color: var(--line) !important; }
+.grid-host .grid-actions .icon-btn { width: 32px; height: 32px; }
+.grid-host .ag-paging-panel { border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.grid-no-rows { color: var(--ink-3); font-size: 14px; }
+
+.grid-toolbar { display: flex; align-items: center; gap: var(--s1) 12px; flex-wrap: wrap; padding: 12px var(--s3); border-bottom: 1px solid var(--line); }
+.grid-toolbar-spacer { flex: 1; }
+.grid-search, .grid-select { height: 36px; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 0 12px; }
+.grid-search { width: 280px; max-width: 100%; }
+.grid-search:focus, .grid-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .18); }
+.grid-count { white-space: nowrap; }
+@media (max-width: 900px) {
+  .grid-host .ag-root-wrapper { --ag-cell-horizontal-padding: 14px; }
+  .grid-toolbar { padding: 12px var(--s2); }
+  .grid-search { flex: 1 1 200px; width: auto; }
 }

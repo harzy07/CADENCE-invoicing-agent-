@@ -213,26 +213,228 @@ function renderSummary() {
   }));
 }
 
+// ---------- Invoices grid (AG Grid Community) ----------
+// The loading, empty and error states stay hand-built. Once there are rows,
+// AG Grid draws the table. The "⋯" menu, confirm dialog and approval gate
+// are unchanged: grid cells only call openMenu().
+
+const STATUS_ORDER = { Overdue: 0, Sent: 1, Draft: 2, "Not created": 3, Unknown: 4, Paid: 5 };
+const gridTheme = window.agGrid ? agGrid.themeQuartz.withParams({
+  fontFamily: "inherit",
+  fontSize: 15,
+  foregroundColor: "#14213a",
+  textColor: "#14213a",
+  subtleTextColor: "#5f6b80",
+  backgroundColor: "#ffffff",
+  accentColor: "#0f766e",
+  borderColor: "#e2e7ef",
+  wrapperBorder: false,
+  wrapperBorderRadius: 0,
+  headerBackgroundColor: "#f8fafc",
+  headerTextColor: "#5f6b80",
+  headerFontSize: 12,
+  headerFontWeight: 650,
+  rowHoverColor: "#fbfcfe",
+  selectedRowBackgroundColor: "#e6f4f2",
+  spacing: 8,
+  cellHorizontalPadding: 24,
+  headerHeight: 44,
+  rowBorder: { color: "#e2e7ef" },
+  columnBorder: false,
+  headerColumnResizeHandleColor: "#cfd7e3",
+  inputFocusBorder: { color: "#0f766e" },
+}) : null;
+
+const grids = new Map(); // container element -> { api, host }
+
+function cellTwoLine(main, sub, mainClass = "cell-main") {
+  const el = h("div", { class: "grid-cell" }, h("span", { class: mainClass, text: main }));
+  if (sub) el.append(h("span", { class: "cell-sub", text: sub, title: sub }));
+  return el;
+}
+
+function invoiceColumns(compact) {
+  return [
+    {
+      colId: "client", headerName: "Client", flex: 2, minWidth: 150,
+      valueGetter: (p) => p.data.deal.client_name,
+      filter: "agTextColumnFilter",
+      filterValueGetter: (p) => `${p.data.deal.client_name} ${p.data.deal.client_email}`,
+      getQuickFilterText: (p) => `${p.data.deal.client_name} ${p.data.deal.client_email} ${p.data.inst.invoice_id || ""}`,
+      cellRenderer: (p) => cellTwoLine(p.data.deal.client_name, p.data.deal.client_email),
+    },
+    {
+      colId: "amount", headerName: "Amount", flex: 1, minWidth: 110, type: "rightAligned",
+      valueGetter: (p) => p.data.amount,
+      filter: "agNumberColumnFilter",
+      cellRenderer: (p) => cellTwoLine(money(p.data.amount), `of ${money(p.data.deal.total)}`),
+      // Keep AG Grid's own right-align class: a plain cellClass would replace the one type:"rightAligned" adds.
+      cellClass: ["money", "ag-right-aligned-cell"], getQuickFilterText: (p) => money(p.data.amount),
+    },
+    {
+      colId: "instalment", headerName: "Instalment", flex: 1.3, minWidth: 115,
+      valueGetter: (p) => p.data.inst.n,
+      filter: "agTextColumnFilter",
+      filterValueGetter: (p) => `${p.data.inst.n} of ${p.data.deal.instalments.length} ${p.data.inst.label}`,
+      cellRenderer: (p) => cellTwoLine(`${p.data.inst.n} of ${p.data.deal.instalments.length}`, p.data.inst.label, ""),
+      getQuickFilterText: (p) => p.data.inst.label,
+    },
+    {
+      colId: "due", headerName: "Due date", flex: 1, minWidth: 118,
+      valueGetter: (p) => p.data.due || "",
+      valueFormatter: (p) => fmtDate(p.value),
+      filter: "agDateColumnFilter",
+      filterValueGetter: (p) => (p.data.due ? new Date(`${p.data.due.slice(0, 10)}T00:00:00`) : null),
+      filterParams: {
+        // Values are local-midnight Dates built from YYYY-MM-DD, so compare by day.
+        comparator: (filterDate, cellDate) => (!cellDate ? -1 : cellDate < filterDate ? -1 : cellDate > filterDate ? 1 : 0),
+      },
+      cellClass: "tabular",
+      getQuickFilterText: (p) => fmtDate(p.data.due),
+    },
+    {
+      colId: "status", headerName: "Status", flex: 0.9, minWidth: 108,
+      valueGetter: (p) => p.data.badge,
+      comparator: (a, b) => (STATUS_ORDER[a] ?? 9) - (STATUS_ORDER[b] ?? 9),
+      filter: "agTextColumnFilter",
+      filterValueGetter: (p) => (p.data.badge === "Not created" ? "Not sent" : p.data.badge === "Unknown" ? "Status unavailable" : p.data.badge),
+      cellRenderer: (p) => {
+        const wrap = h("div", { class: "grid-cell" }, pill(p.data.badge));
+        if (p.data.inst.status_error) wrap.append(h("span", { class: "cell-sub", text: "Could not load status" }));
+        return wrap;
+      },
+    },
+    {
+      colId: "actions", headerName: "", width: 64, maxWidth: 64, sortable: false, resizable: false,
+      pinned: "right", lockPinned: true, // always reachable, even when the table scrolls sideways on tablets
+      suppressMovable: true, suppressHeaderMenuButton: true, cellClass: "grid-actions",
+      cellRenderer: (p) => h("button", {
+        class: "icon-btn", "aria-label": `Actions for ${p.data.deal.client_name}, instalment ${p.data.inst.n}`, "aria-haspopup": "menu",
+        onclick: (e) => { e.stopPropagation(); openMenu(e.currentTarget, p.data); },
+      }, svg(ICON.dots)),
+    },
+  ].map((c) => ({
+    sortable: !compact && c.sortable !== false, resizable: !compact && c.resizable !== false, ...c,
+    // The Dashboard preview is a fixed 6-row list: no sorting or column filters there.
+    ...(compact ? { sortable: false, filter: false } : {}),
+  }));
+}
+
+// Toolbar shown above the full Invoices grid.
+function invoiceToolbar(getApi, state_) {
+  const search = h("input", { type: "search", class: "grid-search", placeholder: "Search client, email, invoice ID…", "aria-label": "Search invoices" });
+  search.addEventListener("input", () => getApi()?.setGridOption("quickFilterText", search.value));
+  const status = h("select", { class: "grid-select", "aria-label": "Filter by status" },
+    ...["All statuses", "Sent", "Overdue", "Paid", "Draft", "Not created"].map((s) => h("option", { value: s === "All statuses" ? "" : s, text: s === "Not created" ? "Not sent" : s })));
+  status.addEventListener("change", () => { state_.status = status.value; getApi()?.onFilterChanged(); });
+  const count = h("span", { class: "muted grid-count", "aria-live": "polite" });
+  const exportBtn = h("button", { class: "btn btn-secondary btn-sm", text: "Export CSV", onclick: () => exportCsv(getApi()) });
+  return { el: h("div", { class: "grid-toolbar" }, search, status, count, h("span", { class: "grid-toolbar-spacer" }), exportBtn), count };
+}
+
+function exportCsv(api) {
+  if (!api) return;
+  api.exportDataAsCsv({
+    fileName: `plainbill-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+    columnKeys: ["client", "amount", "instalment", "due", "status"],
+    processHeaderCallback: (p) => p.column.getColDef().headerName,
+    processCellCallback: (p) => {
+      const r = p.node.data;
+      switch (p.column.getColId()) {
+        case "client": return `${r.deal.client_name} <${r.deal.client_email}>`;
+        case "amount": return r.amount.toFixed(2);
+        case "instalment": return `${r.inst.n} of ${r.deal.instalments.length} - ${r.inst.label}`;
+        case "due": return r.due || "";
+        case "status": return r.badge === "Not created" ? "Not sent" : r.badge === "Unknown" ? "Status unavailable" : r.badge;
+        default: return p.value;
+      }
+    },
+  });
+}
+
+function destroyGrid(container) {
+  const g = grids.get(container);
+  if (g) { g.api.destroy(); grids.delete(container); }
+}
+
 function renderInvoices(container, limit) {
+  const compact = Number.isFinite(limit);
   if (state.error && !state.deals) {
+    destroyGrid(container);
     container.replaceChildren(h("div", { class: "card-body" }, errorBlock("Couldn't load invoices", state.error, () => loadDeals())));
     return;
   }
   if (!state.deals) {
+    destroyGrid(container);
     container.replaceChildren(tableShell(Array.from({ length: 4 }, () => h("tr", {},
       ...[40, 18, 22, 20, 14, 0].map((w) => h("td", {}, w ? h("span", { class: "sk sk-line", style: `width:${w * 2}%` }) : null))))));
     return;
   }
   const rows = invoiceRows().slice(0, limit);
   if (!rows.length) {
+    destroyGrid(container);
     container.replaceChildren(h("div", { class: "empty" }, svg(ICON.doc),
       h("h3", { text: "No invoices yet" }),
       h("p", { text: "Describe your first client deal. The AI drafts a payment plan, and nothing is sent until you approve it." }),
       h("a", { class: "btn btn-primary", href: "#new" }, svg(ICON.plus), "New deal")));
     return;
   }
-  const body = rows.map((r) => h("tr", {},
-    h("td", { class: "cell-client" }, h("span", { class: "cell-main", text: r.deal.client_name }), h("span", { class: "cell-sub", text: r.deal.client_email, title: r.deal.client_email })),
+  if (!window.agGrid) { // grid script failed to load: keep the plain table working
+    container.replaceChildren(plainTable(rows));
+    return;
+  }
+
+  let g = grids.get(container);
+  if (!g || !container.contains(g.host)) {
+    destroyGrid(container);
+    const filter = { status: "" };
+    const host = h("div", { class: "grid-host" });
+    let api = null;
+    const toolbar = compact ? null : invoiceToolbar(() => api, filter);
+    container.replaceChildren(...[toolbar?.el, host].filter(Boolean));
+    const updateCount = () => {
+      if (!toolbar) return;
+      const shown = api.getDisplayedRowCount();
+      const total = grids.get(container)?.total ?? shown;
+      toolbar.count.textContent = shown === total ? `${total} invoice${total === 1 ? "" : "s"}` : `${shown} of ${total} invoices`;
+    };
+    api = agGrid.createGrid(host, {
+      theme: gridTheme,
+      columnDefs: invoiceColumns(compact),
+      rowData: rows,
+      getRowId: (p) => `${p.data.deal.id}:${p.data.inst.n}`,
+      rowHeight: 68,
+      domLayout: "autoHeight",
+      suppressCellFocus: false,
+      animateRows: true,
+      suppressDragLeaveHidesColumns: true,
+      pagination: !compact,
+      paginationPageSize: 20,
+      paginationPageSizeSelector: [10, 20, 50, 100],
+      isExternalFilterPresent: () => Boolean(filter.status),
+      doesExternalFilterPass: (node) => node.data.badge === filter.status,
+      localeText: {
+        noMatchingRows: "No invoices match your search or status filter.",
+        noRowsToShow: "No invoices yet.",
+        loadingOoo: "Refreshing from PayPal…",
+      },
+      onModelUpdated: updateCount,
+      onFirstDataRendered: updateCount,
+    });
+    g = { api, host, total: rows.length };
+    grids.set(container, g);
+    updateCount();
+  } else {
+    g.total = rows.length;
+    g.api.setGridOption("rowData", rows);
+  }
+  g.api.setGridOption("loading", Boolean(state.loading));
+}
+
+// Fallback used only if /vendor/ag-grid-community.min.js doesn't load.
+function plainTable(rows) {
+  return tableShell(rows.map((r) => h("tr", {},
+    h("td", { class: "cell-client" }, h("span", { class: "cell-main", text: r.deal.client_name }), h("span", { class: "cell-sub", text: r.deal.client_email })),
     h("td", { class: "money" }, h("span", { class: "cell-main", text: money(r.amount) }), h("span", { class: "cell-sub", text: `of ${money(r.deal.total)}` })),
     h("td", {}, h("span", { text: `${r.inst.n} of ${r.deal.instalments.length}` }), h("span", { class: "cell-sub", text: r.inst.label })),
     h("td", { class: "tabular nowrap", text: fmtDate(r.due) }),
@@ -240,9 +442,7 @@ function renderInvoices(container, limit) {
     h("td", { class: "actions" }, h("button", {
       class: "icon-btn", "aria-label": `Actions for ${r.deal.client_name}, instalment ${r.inst.n}`, "aria-haspopup": "menu",
       onclick: (e) => openMenu(e.currentTarget, r),
-    }, svg(ICON.dots)))));
-  if (state.loading) body.forEach((tr) => tr.setAttribute("aria-busy", "true"));
-  container.replaceChildren(tableShell(body));
+    }, svg(ICON.dots))))));
 }
 
 function tableShell(bodyRows) {
@@ -250,7 +450,7 @@ function tableShell(bodyRows) {
     h("thead", {}, h("tr", {},
       h("th", { scope: "col", text: "Client" }), h("th", { scope: "col", class: "money", text: "Amount" }),
       h("th", { scope: "col", text: "Instalment" }), h("th", { scope: "col", text: "Due date" }),
-      h("th", { scope: "col", text: "Status" }), h("th", { scope: "col" }, h("span", { class: "sr-only", text: "" })))),
+      h("th", { scope: "col", text: "Status" }), h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Actions" })))),
     h("tbody", {}, bodyRows)));
 }
 
@@ -614,11 +814,14 @@ $("advice-btn").addEventListener("click", async () => {
   try {
     const { decision, ai } = await api(`/api/deals/${encodeURIComponent(reminderRow.deal.id)}/reminder-strategy`, { days_overdue: days });
     const tone = $("decision-tone");
-    tone.textContent = decision.tone.replace("_", " ");
+    tone.textContent = decision.tone;
     tone.className = `tone-chip tone-${decision.tone}`;
+    tone.dataset.tone = decision.tone;
     aiVia($("decision-ai"), ai);
     $("decision-sample").hidden = !ai.sample_data;
     $("decision-reasoning").textContent = decision.reasoning;
+    $("decision-policy").textContent = decision.policy_note || "";
+    $("decision-policy").hidden = !decision.policy_note;
     $("decision-message").value = decision.message;
     $("decision-next").textContent = `Next: ${decision.next_action}`;
     updateCount();
@@ -638,13 +841,13 @@ $("reminder-send-btn").addEventListener("click", () => {
   const message = $("decision-message").value.trim();
   if (!message) return showAlert($("advice-error"), new Error("The message is empty. Write a short note to the client."));
   const r = reminderRow;
-  const toneText = $("decision-tone").textContent;
-  const tone = toneText.charAt(0).toUpperCase() + toneText.slice(1);
+  const toneKey = $("decision-tone").dataset.tone || null;
+  const tone = toneKey ? toneKey.charAt(0).toUpperCase() + toneKey.slice(1) : "";
   confirmSend({
     text: [`You're about to send a reminder for `, h("strong", { text: money(r.amount) }), " to ", h("span", { class: "email", text: r.deal.sent_to_email }), "."],
     details: [["Client", r.deal.client_name], ["Invoice", `${r.inst.n} of ${r.deal.instalments.length} · ${r.inst.invoice_id}`], ["Tone", tone]],
     run: async () => {
-      await api(`/api/deals/${encodeURIComponent(r.deal.id)}/remind`, { message, approved: true });
+      await api(`/api/deals/${encodeURIComponent(r.deal.id)}/remind`, { message, approved: true, tone: toneKey });
       logEvent({ type: "reminder", dealId: r.deal.id, client: r.deal.client_name, invoiceId: r.inst.invoice_id, n: r.inst.n, tone });
       closeModal("reminder-modal");
       toast(`Reminder sent to ${r.deal.sent_to_email}.`);

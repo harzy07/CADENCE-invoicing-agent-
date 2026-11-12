@@ -33,7 +33,8 @@ Rules:
 - Only use facts stated in the text. Never invent or guess a name, email address or amount.
 - If the client email is not written in the text, set client_email to null and add "client_email" to missing_fields.
 - If the total amount is not stated or cannot be computed from stated numbers, set total to null and add "total" to missing_fields.
-- If the client name is not stated, set client_name to null and add "client_name" to missing_fields.
+- client_name is the business or person the work is for, as written. "Logo design for Harbor Coffee" means client_name is "Harbor Coffee"; "website for Maria Lopez" means "Maria Lopez". Only if no client is named at all, set client_name to null and add "client_name" to missing_fields.
+- A missing email does not make the client name missing, and a missing name does not make the email missing. Judge each field on its own.
 - total is a plain number in USD, e.g. 1200 (not "$1,200").
 - currency is always "USD".
 - Instalments follow the schedule in the text. Percents add up to 100. If no schedule is given, use one instalment of 100% due in 30 days labelled "Full payment".
@@ -100,54 +101,197 @@ async function parseDeal(text) {
 }
 
 // ---------- reminderStrategy ----------
-const TONES = ["friendly", "firm", "final_notice"];
+// Tones from softest to strictest. The escalation policy below is enforced in
+// code; the prompt only explains it so the AI usually agrees with it.
+const TONES = ["friendly", "firm", "formal"];
+const toneRank = (t) => TONES.indexOf(t);
+const MAX_MESSAGE_WORDS = 90;
+
+// Minimum tone for how late the invoice is.
+function minimumTone(daysOverdue) {
+  if (daysOverdue >= 15) return "formal";
+  if (daysOverdue >= 6) return "firm";
+  return "friendly"; // 0-5 days
+}
+
+// Returns the tone to use and whether policy changed the AI's choice.
+// The AI may go stricter than the minimum only when 2+ reminders were already sent.
+function applyEscalationPolicy(aiTone, daysOverdue, remindersSent) {
+  const min = minimumTone(daysOverdue);
+  const tone = TONES.includes(aiTone) ? aiTone : min;
+  if (toneRank(tone) < toneRank(min)) return { tone: min, minimum: min, changed: "raised" };
+  if (toneRank(tone) > toneRank(min) && remindersSent < 2) return { tone: min, minimum: min, changed: "lowered" };
+  return { tone, minimum: min, changed: null };
+}
+
+const POLICY_NOTES = {
+  raised: "Tone raised by escalation policy.",
+  lowered: "Tone lowered by escalation policy: a stricter tone needs at least 2 earlier reminders.",
+};
+
+// Things the message must never contain (invented penalties or threats).
+const FORBIDDEN = /\b(late[- ]fees?|late charges?|interest (charge|rate)s?|charge interest|penalt(y|ies)|legal|lawyers?|attorneys?|court|collections? agency|debt collect\w*|lawsuit|sue|small claims)\b/i;
+const wordCount = (s) => (String(s).trim().match(/\S+/g) || []).length;
 
 const REMINDER_SHAPE = `{
-  "tone": "friendly" | "firm" | "final_notice",
+  "tone": "friendly" | "firm" | "formal",
   "reasoning": string,
   "message": string,
   "next_action": string
 }`;
 
+const TONE_GUIDE = `- friendly: warm and light, assumes it was an oversight.
+- firm: direct and polite, clearly asks for payment soon or a reply.
+- formal: businesslike and serious, states the amount, how many days overdue and how many reminders were already sent, and asks for payment or a reply now.`;
+
+const GUARDRAILS = `- Never mention or invent late fees, interest, penalties, collections, or legal action of any kind.
+- Never promise discounts, extensions, payment plans, deadlines or anything else that is not in the context.
+- No links and no invented facts.
+- The message must be under ${MAX_MESSAGE_WORDS} words, addressed to the client, mention the instalment and the amount, and be signed off without a name.`;
+
 const REMINDER_SYSTEM = `You advise a freelancer on chasing an unpaid PayPal invoice.
 Reply with one JSON object only, no other text, in exactly this shape:
 ${REMINDER_SHAPE}
 
-- tone: pick from the three values based on days overdue, how many reminders were already sent, and the notes.
-- reasoning: 1-2 sentences explaining why this tone and timing fit this specific context. Refer to the actual numbers.
-- message: a short, polite, professional note to the client, under 600 characters, signed off without a name. Mention the instalment and amount. No threats, no legal claims, no invented facts, no links.
-- next_action: one sentence on what to do next and when.`;
+Escalation policy (the app enforces it):
+- 0-5 days overdue: "friendly".
+- 6-14 days overdue: "firm".
+- 15 or more days overdue: "formal".
+- Choose a stricter tone than that only if reminders_sent is 2 or more.
+- If previous_tone is given, build on it: do not repeat the same soft wording.
+
+Tones:
+${TONE_GUIDE}
+
+Fields:
+- reasoning: 1-2 sentences explaining why this tone and timing fit. It must state the exact days_overdue and the exact reminders_sent as digits, for example "12 days overdue with 0 reminders sent".
+- message: the reminder to the client, written in the chosen tone.
+- next_action: one short, concrete step with timing for the freelancer, for example "Wait 3 days, then send the next reminder", "Call the client", or "Pause work until paid". Never suggest a softer tone than the one you chose.
+
+Guardrails:
+${GUARDRAILS}`;
+
+// Used only when policy changed the tone, so the message matches the final tone.
+const REWRITE_SHAPE = `{
+  "message": string,
+  "next_action": string
+}`;
+const REWRITE_SYSTEM = `You write a payment reminder from a freelancer to a client about an unpaid PayPal invoice.
+Reply with one JSON object only, no other text, in exactly this shape:
+${REWRITE_SHAPE}
+
+The tone is fixed and given in the context as "tone". Tones:
+${TONE_GUIDE}
+
+- next_action: one short, concrete step with timing for the freelancer, for example "Wait 3 days, then send the next reminder", "Call the client", or "Pause work until paid". Never suggest a softer tone than the given tone.
+
+Guardrails:
+${GUARDRAILS}`;
+
+function messageProblems(message) {
+  const problems = [];
+  if (typeof message === "string") {
+    if (!message.trim()) problems.push(`"message" is empty`);
+    if (wordCount(message) > MAX_MESSAGE_WORDS) problems.push(`"message" must be under ${MAX_MESSAGE_WORDS} words (got ${wordCount(message)})`);
+    if (FORBIDDEN.test(message)) problems.push(`"message" must not mention fees, interest, penalties, collections or legal action`);
+  }
+  return problems;
+}
+
+// next_action must not step down, e.g. "send a firm reminder" after a formal one.
+function nextActionProblems(nextAction, tone) {
+  if (typeof nextAction !== "string" || !TONES.includes(tone)) return [];
+  const softer = TONES.slice(0, toneRank(tone)).filter((t) => new RegExp(`\\b${t}\\b`, "i").test(nextAction));
+  return softer.length ? [`"next_action" suggests a softer tone (${softer.join(", ")}) than "${tone}"`] : [];
+}
 
 function validateReminder(o) {
   const problems = check(o, { tone: ["string"], reasoning: ["string"], message: ["string"], next_action: ["string"] });
-  if (typeof o.tone === "string" && !TONES.includes(o.tone.toLowerCase())) problems.push(`"tone" must be one of ${TONES.join(", ")}`);
-  if (typeof o.message === "string" && !o.message.trim()) problems.push(`"message" is empty`);
-  return problems;
+  const tone = typeof o.tone === "string" ? o.tone.trim().toLowerCase() : null;
+  if (tone && !TONES.includes(tone)) problems.push(`"tone" must be one of ${TONES.join(", ")}`);
+  return problems.concat(messageProblems(o.message), nextActionProblems(o.next_action, tone));
+}
+
+const validateRewrite = (tone) => (o) =>
+  check(o, { message: ["string"], next_action: ["string"] }).concat(messageProblems(o.message), nextActionProblems(o.next_action, tone));
+
+// The reasoning must name the actual numbers; add them if the model left them out.
+function withNumbers(reasoning, days, sent) {
+  const text = reasoning.trim();
+  const hasDays = new RegExp(`\\b${days}\\b`).test(text);
+  const hasSent = new RegExp(`\\b${sent}\\b`).test(text) || (sent === 0 && /\bno (prior |previous |earlier )?reminders?\b/i.test(text));
+  if (hasDays && hasSent) return text;
+  return `${text} (${days} day${days === 1 ? "" : "s"} overdue, ${sent} reminder${sent === 1 ? "" : "s"} sent so far.)`;
+}
+
+// Final safety net: keep the message under the word limit at a sentence end.
+function capWords(message, max = MAX_MESSAGE_WORDS) {
+  const text = message.trim();
+  if (wordCount(text) <= max) return text;
+  const words = text.split(/\s+/).slice(0, max).join(" ");
+  const end = Math.max(words.lastIndexOf(". "), words.lastIndexOf("! "), words.lastIndexOf("? "));
+  return end > 0 ? words.slice(0, end + 1) : `${words}…`;
 }
 
 function sampleReminder() {
   return {
     tone: "friendly",
-    reasoning: "Sample reasoning: the invoice is only slightly overdue and no reminder has been sent, so a light nudge fits.",
+    reasoning: "Sample reasoning (AI_MODE=mock).",
     message: "Hi, just a friendly reminder that this invoice is now due. Thanks!",
     next_action: "Wait 7 days, then send a firmer reminder if it is still unpaid.",
   };
 }
 
 async function reminderStrategy(context) {
+  const days = Number(context.days_overdue);
+  const sent = Number(context.reminders_sent) || 0;
+  if (!Number.isInteger(days) || days < 0) throw new AppError(400, "BAD_REQUEST", "days_overdue must be a whole number of 0 or more.");
   const ctx = {
     client_name: context.client_name || "the client",
     amount: context.amount,
-    days_overdue: context.days_overdue,
-    reminders_sent: context.reminders_sent,
     instalment_label: context.instalment_label,
-    notes: context.notes || "",
+    days_overdue: days,
+    reminders_sent: sent,
+    previous_tone: TONES.includes(context.previous_tone) ? context.previous_tone : null,
   };
-  const { data, ai } = await callLLM(REMINDER_SYSTEM, `Context (JSON):\n${JSON.stringify(ctx, null, 2)}`, { validate: validateReminder, mock: sampleReminder });
+
+  const first = await callLLM(REMINDER_SYSTEM, `Context (JSON):\n${JSON.stringify(ctx, null, 2)}`, { validate: validateReminder, mock: sampleReminder });
+  const aiTone = first.data.tone.trim().toLowerCase();
+  const policy = applyEscalationPolicy(aiTone, days, sent);
+  let message = first.data.message;
+  let nextAction = first.data.next_action;
+  let ai = first.ai;
+  let rewriteNote = null;
+
+  if (policy.changed) {
+    // The AI's message was written for a different tone, so rewrite it for the enforced one.
+    try {
+      const re = await callLLM(REWRITE_SYSTEM, `Context (JSON):\n${JSON.stringify({ ...ctx, tone: policy.tone }, null, 2)}`, {
+        validate: validateRewrite(policy.tone),
+        mock: () => ({ message: sampleReminder().message, next_action: sampleReminder().next_action }),
+      });
+      message = re.data.message;
+      nextAction = re.data.next_action;
+      ai = { ...re.ai, fallback_used: first.ai.fallback_used || re.ai.fallback_used };
+    } catch (err) {
+      rewriteNote = `The message was written for a ${aiTone} tone. Review it before sending.`;
+      console.warn(`[ai] tone rewrite failed, keeping the original message (${err.code || err.message})`);
+    }
+  }
+
   return {
-    decision: { tone: data.tone.toLowerCase(), reasoning: data.reasoning.trim(), message: data.message.trim(), next_action: data.next_action.trim() },
+    decision: {
+      tone: policy.tone,
+      reasoning: withNumbers(first.data.reasoning, days, sent),
+      message: capWords(message),
+      next_action: nextAction.trim(),
+      ai_tone: aiTone,
+      minimum_tone: policy.minimum,
+      policy_note: [policy.changed ? POLICY_NOTES[policy.changed] : null, rewriteNote].filter(Boolean).join(" ") || null,
+    },
     ai,
   };
 }
 
-module.exports = { parseDeal, reminderStrategy };
+module.exports = { parseDeal, reminderStrategy, applyEscalationPolicy, minimumTone, TONES };
+

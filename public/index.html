@@ -154,6 +154,7 @@
           <div class="sample-note" id="decision-sample" hidden>Sample data (AI_MODE=mock). This advice was not written by an AI model.</div>
           <h3 class="label-sm">Why this tone</h3>
           <p class="reasoning" id="decision-reasoning"></p>
+          <p class="policy-note" id="decision-policy" hidden></p>
           <label for="decision-message" class="label-sm">Message to client</label>
           <textarea id="decision-message" rows="6" maxlength="4000"></textarea>
           <div class="field-foot">
@@ -190,6 +191,7 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
+  <script src="/vendor/ag-grid-community.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -16,6 +16,17 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, "..", "public")));
+// AG Grid Community browser bundle, served locally (no CDN). Only this one file is exposed.
+// The package's "exports" map hides dist/ (and package.json), so resolve the
+// main entry and walk up to the package folder.
+const AG_GRID_JS = (() => {
+  let dir = path.dirname(require.resolve("ag-grid-community"));
+  while (path.basename(dir) !== "ag-grid-community" && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  return path.join(dir, "dist", "ag-grid-community.min.js");
+})();
+app.get("/vendor/ag-grid-community.min.js", (req, res) => {
+  res.sendFile(AG_GRID_JS, { maxAge: "1d" });
+});
 
 // ---------- helpers ----------
 
@@ -214,15 +225,15 @@ app.post("/api/deals/:id/reminder-strategy", async (req, res) => {
   const deal = findDeal(req.params.id);
   const days = Number(req.body?.days_overdue);
   if (!Number.isInteger(days) || days < 0 || days > 365) throw new AppError(400, "BAD_REQUEST", "days_overdue must be a whole number from 0 to 365.");
-  const { i, inst, inv } = await latestUnpaidInvoice(deal);
-  const earlier = deal.instalments.slice(0, i).length;
+  const { i, inst } = await latestUnpaidInvoice(deal);
+  const sentForInvoice = deal.reminders.filter((r) => r.invoice_id === inst.invoice_id);
   const context = {
     client_name: deal.plan.client_name,
     amount: `${inst.amount} USD`,
-    days_overdue: days,
-    reminders_sent: deal.reminders.filter((r) => r.invoice_id === inst.invoice_id).length,
     instalment_label: `${inst.label} (instalment ${i + 1} of ${deal.instalments.length})`,
-    notes: `PayPal status: ${inv.status}. Deal total ${deal.plan.total} USD. ${earlier ? `${earlier} earlier instalment(s) were already invoiced.` : "This is the first invoice for this client."}`,
+    days_overdue: days,
+    reminders_sent: sentForInvoice.length,
+    previous_tone: sentForInvoice.filter((r) => r.tone).at(-1)?.tone || null,
   };
   const { decision, ai: aiInfo } = await ai.reminderStrategy(context);
   res.json({ deal_id: deal.id, invoice_id: inst.invoice_id, context, decision, ai: aiInfo });
@@ -236,7 +247,9 @@ app.post("/api/deals/:id/remind", async (req, res) => {
   await withDealLock(deal.id, async () => {
     const { inst } = await latestUnpaidInvoice(deal);
     await paypal.sendReminder(inst.invoice_id, message);
-    deal.reminders.push({ invoice_id: inst.invoice_id, sent_at: new Date().toISOString(), message });
+    // Optional: the tone of the approved reminder, used as previous_tone next time.
+    const tone = ai.TONES.includes(req.body?.tone) ? req.body.tone : null;
+    deal.reminders.push({ invoice_id: inst.invoice_id, sent_at: new Date().toISOString(), message, tone });
     store.saveDeal(deal);
     res.json({
       deal_id: deal.id,
