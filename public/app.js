@@ -1,4 +1,4 @@
-// Plainbill frontend. Plain JS, no frameworks. All data is rendered with
+// Cadence frontend. Plain JS, no frameworks. All data is rendered with
 // textContent / DOM nodes, never innerHTML with server data.
 // The only place that sends {approved: true} is the confirm modal's
 // "Approve and send" button (see confirmSend).
@@ -87,7 +87,13 @@ function friendly(code, message) {
 // ---------- Local activity log ----------
 // The server stores approvals and send times. Parse events, reminder times and
 // simulated payments are recorded here, in this browser, as they happen.
-const LOG_KEY = "plainbill.activity.v1";
+const LOG_KEY = "cadence.activity.v1";
+// Carry over activity recorded before the rename (old key from the Plainbill name).
+try {
+  const old = localStorage.getItem("plainbill.activity.v1");
+  if (old && !localStorage.getItem(LOG_KEY)) localStorage.setItem(LOG_KEY, old);
+  localStorage.removeItem("plainbill.activity.v1");
+} catch { /* storage disabled */ }
 function readLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; } }
 function logEvent(e) {
   const log = readLog();
@@ -127,7 +133,7 @@ function route() {
   document.querySelectorAll(".page").forEach((p) => { p.hidden = p.dataset.page !== name; });
   document.querySelectorAll(".nav a").forEach((a) => (a.dataset.route === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
   $("page-title").textContent = TITLES[name];
-  document.title = `${TITLES[name]} · Plainbill`;
+  document.title = `${TITLES[name]} · Cadence`;
   closeMenu();
   render();
 }
@@ -335,7 +341,7 @@ function invoiceToolbar(getApi, state_) {
 function exportCsv(api) {
   if (!api) return;
   api.exportDataAsCsv({
-    fileName: `plainbill-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+    fileName: `cadence-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
     columnKeys: ["client", "amount", "instalment", "due", "status"],
     processHeaderCallback: (p) => p.column.getColDef().headerName,
     processCellCallback: (p) => {

@@ -1,6 +1,8 @@
-# Plainbill: AI invoice agent for freelancers
+# Cadence: AI invoice agent for freelancers
 
-Plainbill turns a deal described in plain words, such as "Website redesign for Riverside Dental, priya@riverside.example, $1,500: 60% upfront, 40% in 30 days", into a PayPal instalment plan. You review and edit the plan, and nothing is sent until you approve it. Approved instalments become real PayPal invoices (sandbox), their live status shows in an AG Grid ledger, and when one is overdue an AI reminder strategist suggests a tone and message inside a fixed escalation policy. You edit and approve every reminder before it goes out.
+*Get paid on schedule, without the chasing.*
+
+Cadence turns a deal described in plain words, such as "Website redesign for Riverside Dental, priya@riverside.example, $1,500: 60% upfront, 40% in 30 days", into a PayPal instalment plan. You review and edit the plan, and nothing is sent until you approve it. Approved instalments become real PayPal invoices (sandbox), their live status shows in an AG Grid ledger, and when one is overdue an AI reminder strategist suggests a tone and message inside a fixed escalation policy. You edit and approve every reminder before it goes out.
 
 **Live demo:** [https://paypal-hackathon-1we7.onrender.com](https://paypal-hackathon-1we7.onrender.com) · **License:** MIT
 
@@ -8,7 +10,7 @@ Plainbill turns a deal described in plain words, such as "Website redesign for R
 
 ## The problem and who it's for
 
-Freelancers and solo contractors often bill in instalments (a deposit, then the rest on delivery) and chase late payments by hand. That means retyping deal terms into an invoicing tool, tracking which instalment is due, and writing reminder emails that are neither too soft nor too aggressive. Plainbill handles the paperwork and suggests the reminder, while the freelancer keeps the final say on every invoice and every message.
+Freelancers and solo contractors often bill in instalments (a deposit, then the rest on delivery) and chase late payments by hand. That means retyping deal terms into an invoicing tool, tracking which instalment is due, and writing reminder emails that are neither too soft nor too aggressive. Cadence handles the paperwork and suggests the reminder, while the freelancer keeps the final say on every invoice and every message.
 
 ## Features
 

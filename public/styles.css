@@ -1,4 +1,4 @@
-/* Plainbill: navy + white, one teal accent, 8px spacing grid. */
+/* Cadence: navy + white, one teal accent, 8px spacing grid. */
 :root {
   --navy-950: #0b1526;
   --navy-900: #0f1e36;
@@ -282,7 +282,7 @@ td.actions .icon-btn { width: 32px; height: 32px; }
   :root { --sidebar-w: 72px; }
   .sidebar { padding: var(--s2) 12px; align-items: center; }
   .wordmark { font-size: 0; padding: 0; }
-  .wordmark::before { content: "p"; font-size: 24px; }
+  .wordmark::before { content: "c"; font-size: 24px; }
   .wordmark span { font-size: 24px; }
   .wordmark span { display: none; }
   .nav a { justify-content: center; padding: 12px; }
