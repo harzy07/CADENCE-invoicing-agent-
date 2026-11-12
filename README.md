@@ -101,7 +101,7 @@ You need Node.js 20.6 or later, a PayPal Developer account (free) and a Groq API
    npm install
    ```
 2. **Create a PayPal sandbox app.** In the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), go to Apps & Credentials, switch to **Sandbox**, create an app and turn on **Invoicing** under Features. Under Testing Tools → Sandbox Accounts, note the email of a **personal** (buyer) sandbox account to use as `CLIENT_EMAIL`.
-3. **Create your `.env`** from the example. `npm start` needs this file to exist.
+3. **Create your `.env`** from the example. The server loads it at startup if it exists; on a host such as Render, set the same names as environment variables instead.
    ```
    cp .env.example .env        # macOS / Linux
    copy .env.example .env      # Windows
@@ -122,13 +122,18 @@ You need Node.js 20.6 or later, a PayPal Developer account (free) and a Groq API
    | `AI2_MODEL` | No | e.g. `gemini-3.5-flash-lite` |
    | `AI_PROVIDER`, `AI2_PROVIDER` | No | Display names for the "AI via" badge. Defaults to Groq / Gemini from the URL |
    | `AI_MODE` | No | `mock` returns labelled sample AI data with no provider calls (local development only; refused when `NODE_ENV=production`) |
-   | `PORT` | No | Defaults to 3000 |
+   | `PORT` | No | Defaults to 3000. Render sets this itself |
+   | `HOST` | No | Defaults to `127.0.0.1` (local connections only). Set `0.0.0.0` on Render |
 
 4. **Run**
    ```
    npm start
    ```
-   Open http://localhost:3000. Locally the server only accepts connections from your own machine.
+   Open http://localhost:3000. By default the server only accepts connections from your own machine.
+
+### Deploying on Render
+
+Create a **Web Service** from this repo with build command `npm install` and start command `npm start`. Add the variables from the table above in the service's Environment settings (not in the repo), plus `HOST=0.0.0.0` and `NODE_ENV=production`. Leave `PORT` unset; Render provides it. Set `CLIENT_EMAIL` so every invoice goes to your sandbox buyer.
 
 5. **Optional PayPal smoke test** (creates and sends one $100 sandbox invoice to `CLIENT_EMAIL`):
    ```

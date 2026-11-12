@@ -1,5 +1,13 @@
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
+
+// Load .env if it exists (local development). On Render there is no .env:
+// settings come from the service's environment variables instead.
+// This must run before ./paypal and ./llm, which read process.env when loaded.
+const ENV_FILE = path.join(__dirname, "..", ".env");
+if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
+
 const express = require("express");
 const paypal = require("./paypal");
 const ai = require("./ai");
@@ -293,9 +301,11 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, "127.0.0.1", () => {
+// Localhost only by default. Set HOST=0.0.0.0 on a host such as Render so it can reach the server.
+const HOST = (process.env.HOST || "127.0.0.1").trim();
+app.listen(PORT, HOST, () => {
   const cfg = describeConfig();
-  console.log(`Invoice agent running at http://localhost:${PORT} (PayPal sandbox, USD only)`);
+  console.log(`Invoice agent running on ${HOST}:${PORT}${HOST === "127.0.0.1" ? ` (http://localhost:${PORT})` : ""} (PayPal sandbox, USD only)`);
   if (cfg.mode === "mock") console.log("AI: MOCK MODE, returns sample data (local development only)");
   else if (!cfg.providers.length) console.log("AI: not configured (set AI_BASE_URL, AI_API_KEY, AI_MODEL)");
   for (const p of cfg.providers) {

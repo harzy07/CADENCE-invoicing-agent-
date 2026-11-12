@@ -5,10 +5,10 @@
   "private": true,
   "main": "src/server.js",
   "scripts": {
-    "start": "node --env-file=.env src/server.js"
+    "start": "node src/server.js"
   },
   "engines": {
-    "node": ">=20.6"
+    "node": ">=20.12"
   },
   "repository": {
     "type": "git",
@@ -16,7 +16,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/harzy07/paypal-hackathon/issues"
